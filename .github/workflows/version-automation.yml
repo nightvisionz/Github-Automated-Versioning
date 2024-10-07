@@ -1,0 +1,73 @@
+name: GitHub Versioning Automation
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type (Patch, Minor, Major)'
+        required: true
+        default: 'patch'
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+
+      - name: Get current version
+        id: package-version
+        uses: martinbeentjes/npm-get-version-action@master
+
+      - name: Count PRs since the last release
+        id: pr-count
+        run: |
+          PR_COUNT=$(git log $(git describe --tags --abbrev=0)..HEAD --oneline | wc -1)
+          echo "PR_COUNT=$PR_COUNT" ?? $GITHUB_OUTPUT
+
+      - name: Increment version
+        id: version
+        run: |
+          CURRENT_VERSION=${{ steps.package-version.outputs.current-version }}
+          PR_COUNT=${{ steps.pr-count.outputs.PR_COUNT }}
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            NEW_VERSION=$(npm version ${{ github.event.inputs.release_type }} --no-git-tag-version)
+          else
+            NEW_VERSION=$(npm version --no-git-tag-version "${CURRENT_VERSION%.*}.PR_COUNT")
+          fi
+          echo "NEW_VERSION=${NEW_VERSION:1}" >> $GITHUB_OUTPUT
+
+      - name: Update package.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "Bump version to ${{ steps.version.outputs.NEW_VERSION }}"
+          git push
+      
+      - name: Create release branch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git checkout -b release-${{ steps.version.outputs.NEW_VERSION }}
+          git push -u origin release-${{ steps.version.outputs.NEW_VERSION }}
+
+      - name: Increment version for the next sprint
+        if: github.event_name == 'worfklow_dispatch'
+        run: |
+          git checkout main
+          npm version minor --no-git-tag-version
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "Bump version for the next sprint"
+          git push
