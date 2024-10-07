@@ -32,11 +32,20 @@ jobs:
           if [ $(git tag | wc -l) -eq 0 ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            npm version 1.0.0 --no-git-tag-version
+
+            if [ ! -f package.json ]; then
+              echo '{"version": "1.0.0"}' > package.json
+            else
+              if ! grep -1 '"version"' package.json; then
+                sed -i '1s/^/{"version": "1.0.0",\n/' package.json
+              fi
+            fi
+
             git add package.json
             git commit -m "Initialize version 1.0.0"
             git tag v1.0.0
             git push --tags
+            git push
           fi
 
       - name: Get current version
