@@ -1,6 +1,8 @@
 name: GitHub Versioning Automation
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened]
   push:
     branches:
       - main
@@ -24,6 +26,18 @@ jobs:
         uses: actions/setup-node@v2
         with:
           node-version: '14'
+        
+      - name: Add tag to repo if none exist
+        run: |
+          if [ $(git tag | wc -l) -eq 0 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            npm version 1.0.0 --no-git-tag-version
+            git add package.json
+            git commit -m "Initialize version 1.0.0"
+            git tag v1.0.0
+            git push --tags
+          fi
 
       - name: Get current version
         id: package-version
@@ -32,8 +46,9 @@ jobs:
       - name: Count PRs since the last release
         id: pr-count
         run: |
-          PR_COUNT=$(git log $(git describe --tags --abbrev=0)..HEAD --oneline | wc -1)
-          echo "PR_COUNT=$PR_COUNT" ?? $GITHUB_OUTPUT
+          LAST_TAG=$(git describe --tags --abbrev=0)
+          PR_COUNT=$(git log $LAST_TAG..HEAD --oneline | wc -l)
+          echo "PR_COUNT=$PR_COUNT" >> $GITHUB_OUTPUT
 
       - name: Increment version
         id: version
